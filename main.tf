@@ -32,17 +32,24 @@ resource "aws_alb" "main" {
 }
 
 resource "aws_alb_target_group" "main" {
+  lifecycle {
+    create_before_destroy = true
+  }
+
   name = "tg${var.environment}${var.name}"
 
   health_check {
     healthy_threshold   = "3"
-    interval            = "30"
+    interval            = "90"
     protocol            = "HTTP"
     matcher             = "200"
     timeout             = "3"
     path                = var.health_check_path
     unhealthy_threshold = "2"
+    port                = var.port
   }
+
+  target_type = "ip"
 
   port     = var.port
   protocol = "HTTP"
@@ -84,7 +91,13 @@ resource "aws_ecs_service" "main" {
   desired_count                      = var.desired_count
   deployment_minimum_healthy_percent = var.deployment_min_healthy_percent
   deployment_maximum_percent         = var.deployment_max_percent
-  iam_role                           = var.ecs_service_role_name
+  launch_type                        = "FARGATE"
+
+  network_configuration {
+    security_groups  = var.security_group_ids
+    subnets          = var.public_subnet_ids
+    assign_public_ip = true
+  }
 
   load_balancer {
     target_group_arn = aws_alb_target_group.main.id
@@ -94,6 +107,7 @@ resource "aws_ecs_service" "main" {
 
   depends_on = [aws_alb_target_group.main]
 }
+
 
 #
 # Application AutoScaling resources
