@@ -4,7 +4,7 @@
 resource "aws_security_group" "main" {
   vpc_id = "${var.vpc_id}"
 
-  tags {
+  tags = {
     Name        = "sg${var.name}LoadBalancer"
     Project     = "${var.project}"
     Environment = "${var.environment}"
@@ -24,7 +24,7 @@ resource "aws_alb" "main" {
     prefix = "${var.access_log_prefix}"
   }
 
-  tags {
+  tags = {
     Name        = "alb${var.environment}${var.name}"
     Project     = "${var.project}"
     Environment = "${var.environment}"
@@ -48,7 +48,7 @@ resource "aws_alb_target_group" "main" {
   protocol = "HTTP"
   vpc_id   = "${var.vpc_id}"
 
-  tags {
+  tags = {
     Name        = "tg${var.environment}${var.name}"
     Project     = "${var.project}"
     Environment = "${var.environment}"
