@@ -15,8 +15,7 @@ resource "aws_security_group" "main" {
 # ALB resources
 #
 resource "aws_alb" "main" {
-  # security_groups = ["${concat(var.security_group_ids, list(aws_security_group.main.id))}"]
-  security_groups = [aws_security_group.main.id]
+  security_groups = flatten([var.security_group_ids, list(aws_security_group.main.id)])
   subnets         = var.public_subnet_ids
   name            = "alb${var.environment}${var.name}"
 
@@ -34,8 +33,6 @@ resource "aws_alb" "main" {
 
 resource "aws_alb_target_group" "main" {
   name = "tg${var.environment}${var.name}"
-
-  target_type = "ip"
 
   health_check {
     healthy_threshold   = "3"
