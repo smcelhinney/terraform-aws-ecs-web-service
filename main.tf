@@ -2,12 +2,12 @@
 # Security group resources
 #
 resource "aws_security_group" "main" {
-  vpc_id = "${var.vpc_id}"
+  vpc_id = var.vpc_id
 
   tags = {
     Name        = "sg${var.name}LoadBalancer"
-    Project     = "${var.project}"
-    Environment = "${var.environment}"
+    Project     = var.project
+    Environment = var.environment
   }
 }
 
@@ -15,24 +15,27 @@ resource "aws_security_group" "main" {
 # ALB resources
 #
 resource "aws_alb" "main" {
-  security_groups = ["${concat(var.security_group_ids, list(aws_security_group.main.id))}"]
-  subnets         = ["${var.public_subnet_ids}"]
+  # security_groups = ["${concat(var.security_group_ids, list(aws_security_group.main.id))}"]
+  security_groups = [aws_security_group.main.id]
+  subnets         = var.public_subnet_ids
   name            = "alb${var.environment}${var.name}"
 
   access_logs {
-    bucket = "${var.access_log_bucket}"
-    prefix = "${var.access_log_prefix}"
+    bucket = var.access_log_bucket
+    prefix = var.access_log_prefix
   }
 
   tags = {
     Name        = "alb${var.environment}${var.name}"
-    Project     = "${var.project}"
-    Environment = "${var.environment}"
+    Project     = var.project
+    Environment = var.environment
   }
 }
 
 resource "aws_alb_target_group" "main" {
   name = "tg${var.environment}${var.name}"
+
+  target_type = "ip"
 
   health_check {
     healthy_threshold   = "3"
@@ -40,30 +43,32 @@ resource "aws_alb_target_group" "main" {
     protocol            = "HTTP"
     matcher             = "200"
     timeout             = "3"
-    path                = "${var.health_check_path}"
+    path                = var.health_check_path
     unhealthy_threshold = "2"
   }
 
-  port     = "${var.port}"
+  port     = var.port
   protocol = "HTTP"
-  vpc_id   = "${var.vpc_id}"
+  vpc_id   = var.vpc_id
 
   tags = {
     Name        = "tg${var.environment}${var.name}"
-    Project     = "${var.project}"
-    Environment = "${var.environment}"
+    Project     = var.project
+    Environment = var.environment
   }
+
+  depends_on = [aws_alb.main]
 }
 
 resource "aws_alb_listener" "https" {
-  load_balancer_arn = "${aws_alb.main.id}"
+  load_balancer_arn = aws_alb.main.id
   port              = "443"
   protocol          = "HTTPS"
 
-  certificate_arn = "${var.ssl_certificate_arn}"
+  certificate_arn = var.ssl_certificate_arn
 
   default_action {
-    target_group_arn = "${aws_alb_target_group.main.id}"
+    target_group_arn = aws_alb_target_group.main.id
     type             = "forward"
   }
 }
@@ -76,19 +81,21 @@ resource "aws_ecs_service" "main" {
     create_before_destroy = true
   }
 
-  name                               = "${var.environment}${var.name}"
-  cluster                            = "${var.cluster_name}"
-  task_definition                    = "${var.task_definition_id}"
-  desired_count                      = "${var.desired_count}"
-  deployment_minimum_healthy_percent = "${var.deployment_min_healthy_percent}"
-  deployment_maximum_percent         = "${var.deployment_max_percent}"
-  iam_role                           = "${var.ecs_service_role_name}"
+  name                               = "${var.name}-${var.environment}"
+  cluster                            = var.cluster_name
+  task_definition                    = var.task_definition_id
+  desired_count                      = var.desired_count
+  deployment_minimum_healthy_percent = var.deployment_min_healthy_percent
+  deployment_maximum_percent         = var.deployment_max_percent
+  iam_role                           = var.ecs_service_role_name
 
   load_balancer {
-    target_group_arn = "${aws_alb_target_group.main.id}"
-    container_name   = "${var.container_name}"
-    container_port   = "${var.container_port}"
+    target_group_arn = aws_alb_target_group.main.id
+    container_name   = var.container_name
+    container_port   = var.container_port
   }
+
+  depends_on = [aws_alb_target_group.main]
 }
 
 #
@@ -98,12 +105,10 @@ resource "aws_appautoscaling_target" "main" {
   service_namespace  = "ecs"
   resource_id        = "service/${var.cluster_name}/${aws_ecs_service.main.name}"
   scalable_dimension = "ecs:service:DesiredCount"
-  min_capacity       = "${var.min_count}"
-  max_capacity       = "${var.max_count}"
+  min_capacity       = var.min_count
+  max_capacity       = var.max_count
 
-  depends_on = [
-    "aws_ecs_service.main",
-  ]
+  depends_on = [aws_ecs_service.main]
 }
 
 resource "aws_appautoscaling_policy" "up" {
@@ -114,7 +119,7 @@ resource "aws_appautoscaling_policy" "up" {
 
   step_scaling_policy_configuration {
     adjustment_type         = "ChangeInCapacity"
-    cooldown                = "${var.scale_up_cooldown_seconds}"
+    cooldown                = var.scale_up_cooldown_seconds
     metric_aggregation_type = "Average"
 
     step_adjustment {
@@ -124,7 +129,7 @@ resource "aws_appautoscaling_policy" "up" {
   }
 
   depends_on = [
-    "aws_appautoscaling_target.main",
+    aws_appautoscaling_target.main
   ]
 }
 
@@ -136,7 +141,7 @@ resource "aws_appautoscaling_policy" "down" {
 
   step_scaling_policy_configuration {
     adjustment_type         = "ChangeInCapacity"
-    cooldown                = "${var.scale_down_cooldown_seconds}"
+    cooldown                = var.scale_down_cooldown_seconds
     metric_aggregation_type = "Average"
 
     step_adjustment {
@@ -146,6 +151,6 @@ resource "aws_appautoscaling_policy" "down" {
   }
 
   depends_on = [
-    "aws_appautoscaling_target.main",
+    aws_appautoscaling_target.main
   ]
 }

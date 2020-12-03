@@ -11,12 +11,12 @@ variable "vpc_id" {}
 variable "name" {}
 
 variable "security_group_ids" {
-  type    = "list"
+  type    = list
   default = []
 }
 
 variable "public_subnet_ids" {
-  type = "list"
+  type = list
 }
 
 variable "access_log_bucket" {}
