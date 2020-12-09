@@ -14,6 +14,9 @@ output "lb_dns_name" {
   value = "${aws_alb.main.dns_name}"
 }
 
+output "alb_arn" {
+  value = "${aws_alb.main.arn}"
+}
 output "lb_security_group_id" {
   value = "${aws_security_group.main.id}"
 }

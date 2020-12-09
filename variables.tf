@@ -19,6 +19,10 @@ variable "public_subnet_ids" {
   type = list
 }
 
+variable "private_subnet_ids" {
+  type = list
+}
+
 variable "access_log_bucket" {}
 
 variable "access_log_prefix" {}

@@ -64,6 +64,24 @@ resource "aws_alb_target_group" "main" {
   depends_on = [aws_alb.main]
 }
 
+resource "aws_alb_listener" "http" {
+  load_balancer_arn = aws_alb.main.id
+  port              = "80"
+  protocol          = "HTTP"
+
+  depends_on = [aws_alb_listener.https]
+
+  default_action {
+    type = "redirect"
+
+    redirect {
+      port        = "443"
+      protocol    = "HTTPS"
+      status_code = "HTTP_301"
+    }
+  }
+}
+
 resource "aws_alb_listener" "https" {
   load_balancer_arn = aws_alb.main.id
   port              = "443"
