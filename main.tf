@@ -1,185 +1,54 @@
-#
-# Security group resources
-#
-resource "aws_security_group" "main" {
-  vpc_id = var.vpc_id
 
-  tags = {
-    Name        = "sg${var.name}LoadBalancer"
-    Project     = var.project
-    Environment = var.environment
-  }
+data "aws_lambda_function" main {
+  function_name = var.lambda_name
 }
 
-#
-# ALB resources
-#
-resource "aws_alb" "main" {
-  security_groups = flatten([var.security_group_ids, list(aws_security_group.main.id)])
-  subnets         = var.public_subnet_ids
-  name            = "alb${var.environment}${var.name}"
-
-  access_logs {
-    bucket = var.access_log_bucket
-    prefix = var.access_log_prefix
-  }
-
-  tags = {
-    Name        = "alb${var.environment}${var.name}"
-    Project     = var.project
-    Environment = var.environment
-  }
-}
-
-resource "aws_alb_target_group" "main" {
-  lifecycle {
-    create_before_destroy = true
-  }
-
-  name = "tg${var.environment}${var.name}"
-
-  health_check {
-    healthy_threshold   = "3"
-    interval            = "90"
-    protocol            = "HTTP"
-    matcher             = "200"
-    timeout             = "3"
-    path                = var.health_check_path
-    unhealthy_threshold = "2"
-    port                = var.port
-  }
-
-  target_type = "ip"
-
-  port     = var.port
-  protocol = "HTTP"
-  vpc_id   = var.vpc_id
-
-  tags = {
-    Name        = "tg${var.environment}${var.name}"
-    Project     = var.project
-    Environment = var.environment
-  }
-
-  depends_on = [aws_alb.main]
-}
-
-resource "aws_alb_listener" "http" {
-  load_balancer_arn = aws_alb.main.id
-  port              = "80"
-  protocol          = "HTTP"
-
-  depends_on = [aws_alb_listener.https]
-
-  default_action {
-    type = "redirect"
-
-    redirect {
-      port        = "443"
-      protocol    = "HTTPS"
-      status_code = "HTTP_301"
-    }
-  }
-}
-
-resource "aws_alb_listener" "https" {
-  load_balancer_arn = aws_alb.main.id
-  port              = "443"
-  protocol          = "HTTPS"
-
-  certificate_arn = var.ssl_certificate_arn
-
-  default_action {
-    target_group_arn = aws_alb_target_group.main.id
+resource aws_lb_listener_rule main {
+  listener_arn = var.alb_listener.arn
+  action {
     type             = "forward"
+    target_group_arn = aws_lb_target_group.main.arn
   }
-}
-
-#
-# ECS resources
-#
-resource "aws_ecs_service" "main" {
-  lifecycle {
-    create_before_destroy = true
+  condition {
+    path_pattern {
+      values = var.alb_path
+    }
   }
-
-  name                               = "${var.name}-${var.environment}"
-  cluster                            = var.cluster_name
-  task_definition                    = var.task_definition_id
-  desired_count                      = var.desired_count
-  deployment_minimum_healthy_percent = var.deployment_min_healthy_percent
-  deployment_maximum_percent         = var.deployment_max_percent
-  launch_type                        = "FARGATE"
-
-  network_configuration {
-    security_groups  = var.security_group_ids
-    subnets          = var.public_subnet_ids
-    assign_public_ip = true
-  }
-
-  load_balancer {
-    target_group_arn = aws_alb_target_group.main.id
-    container_name   = var.container_name
-    container_port   = var.container_port
-  }
-
-  depends_on = [aws_alb_target_group.main]
-}
-
-
-#
-# Application AutoScaling resources
-#
-resource "aws_appautoscaling_target" "main" {
-  service_namespace  = "ecs"
-  resource_id        = "service/${var.cluster_name}/${aws_ecs_service.main.name}"
-  scalable_dimension = "ecs:service:DesiredCount"
-  min_capacity       = var.min_count
-  max_capacity       = var.max_count
-
-  depends_on = [aws_ecs_service.main]
-}
-
-resource "aws_appautoscaling_policy" "up" {
-  name               = "appScalingPolicy${var.environment}${var.name}ScaleUp"
-  service_namespace  = "ecs"
-  resource_id        = "service/${var.cluster_name}/${aws_ecs_service.main.name}"
-  scalable_dimension = "ecs:service:DesiredCount"
-
-  step_scaling_policy_configuration {
-    adjustment_type         = "ChangeInCapacity"
-    cooldown                = var.scale_up_cooldown_seconds
-    metric_aggregation_type = "Average"
-
-    step_adjustment {
-      metric_interval_lower_bound = 0
-      scaling_adjustment          = 1
+  condition {
+    http_request_method {
+      values = var.alb_request_methods
     }
   }
 
-  depends_on = [
-    aws_appautoscaling_target.main
-  ]
+  depends_on = [aws_lb_target_group.main]
 }
 
-resource "aws_appautoscaling_policy" "down" {
-  name               = "appScalingPolicy${var.environment}${var.name}ScaleDown"
-  service_namespace  = "ecs"
-  resource_id        = "service/${var.cluster_name}/${aws_ecs_service.main.name}"
-  scalable_dimension = "ecs:service:DesiredCount"
+resource aws_lambda_alias alias {
+  name             = var.alias_name
+  description      = var.alias_description
+  function_name    = data.aws_lambda_function.main.arn
+  function_version = data.aws_lambda_function.main.version
+}
 
-  step_scaling_policy_configuration {
-    adjustment_type         = "ChangeInCapacity"
-    cooldown                = var.scale_down_cooldown_seconds
-    metric_aggregation_type = "Average"
+resource aws_lb_target_group main {
+  name        = var.target_group_name
+  target_type = "lambda"
+}
 
-    step_adjustment {
-      metric_interval_upper_bound = 0
-      scaling_adjustment          = -1
-    }
-  }
+resource aws_lambda_permission alb {
+  statement_id  = "AllowExecutionFromALB"
+  action        = "lambda:InvokeFunction"
+  function_name = data.aws_lambda_function.main.function_name
+  principal     = "elasticloadbalancing.amazonaws.com"
+  qualifier     = aws_lambda_alias.alias.name
+  source_arn    = aws_lb_target_group.main.arn
+}
 
+resource aws_lb_target_group_attachment main {
+  target_group_arn = aws_lb_target_group.main.arn
+  target_id        = aws_lambda_alias.alias.arn
   depends_on = [
-    aws_appautoscaling_target.main
+    aws_lambda_permission.alb,
+    aws_lambda_alias.alias
   ]
 }

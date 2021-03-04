@@ -1,74 +1,32 @@
-variable "project" {
-  default = "Unknown"
+variable "alias_name" {
+  description = "The alias name for this Lambda"
+  default     = "live"
 }
 
-variable "environment" {
-  default = "Unknown"
+variable "alias_description" {
+  description = "The description for this Lambda alias"
+  default     = "Live alias"
 }
 
-variable "vpc_id" {}
-
-variable "name" {}
-
-variable "security_group_ids" {
-  type    = list
-  default = []
+variable "alb_path" {
+  description = "The path on the ALB to set up the listener to"
+  default     = ["/default"]
 }
 
-variable "public_subnet_ids" {
-  type = list
+variable "alb_listener" {
+  description = "The listener to bind this association to"
 }
 
-variable "private_subnet_ids" {
-  type = list
+variable "lambda_name" {
+  description = "Lambda name"
 }
 
-variable "access_log_bucket" {}
-
-variable "access_log_prefix" {}
-
-variable "health_check_path" {
-  default = "/"
+variable alb_request_methods {
+  description = "The request methods to be created on the ALB."
+  type        = list(string)
+  default     = ["OPTIONS", "GET"]
 }
 
-variable "port" {}
-
-variable "ssl_certificate_arn" {}
-
-variable "cluster_name" {}
-
-variable "task_definition_id" {}
-
-variable "desired_count" {
-  default = "1"
+variable target_group_name {
+  description = "Target group name."
 }
-
-variable "deployment_min_healthy_percent" {
-  default = "100"
-}
-
-variable "deployment_max_percent" {
-  default = "200"
-}
-
-variable "container_name" {}
-
-variable "container_port" {}
-
-variable "min_count" {
-  default = "1"
-}
-
-variable "max_count" {
-  default = "1"
-}
-
-variable "scale_up_cooldown_seconds" {
-  default = "300"
-}
-
-variable "scale_down_cooldown_seconds" {
-  default = "300"
-}
-
-variable "ecs_service_role_name" {}
